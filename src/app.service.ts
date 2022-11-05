@@ -1,32 +1,74 @@
-import { Injectable } from '@nestjs/common';
-import { HttpService } from "@nestjs/axios";
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { PrismaService } from './prisma/prisma.service';
 
 @Injectable()
 export class AppService {
-  constructor(private api: HttpService) {}
-  async extractRefacts(name: string, url: string):Promise<any> {
+  constructor(private api: HttpService, private prisma: PrismaService) {}
+  async extractRefacts(name: string, url: string): Promise<any> {
     try {
-      const response = await this.api.axiosRef.post('http://localhost:8080/refact',{name,url});
-      return response.data.map(item=>(JSON.parse(item)))
+      const findRepo = await this.prisma.repo.findFirst({
+        where: { repoUrl: url },
+      });
+
+      if (!findRepo)
+        throw new HttpException('Repo not found', HttpStatus.BAD_REQUEST);
+
+      const response = await this.api.axiosRef.post(
+        'http://localhost:8080/refact/all',
+        { name, url, branch: 'master' },
+      );
+
+      const formatted = response.data.map((item) => JSON.parse(item));
+
+      formatted.forEach(async (element) => {
+        const findRefact = await this.prisma.refact.findFirst({
+          where: {
+            repoId: findRepo.id,
+            type: element.type,
+            description: element.description,
+            filePath: element.rightSideLocations[0].filePath,
+          },
+        });
+        if (!findRefact) {
+          await this.prisma.refact.create({
+            data: {
+              repoId: findRepo.id,
+              type: element.type,
+              description: element.description,
+              filePath: element.rightSideLocations[0].filePath,
+            },
+          });
+        }
+      });
+
+      console.log(formatted);
+
+      // return a;
     } catch (error) {
       console.log(error);
     }
   }
 
-  async getRefactsInfo(url: string):Promise<any> {
+  async getRefactsInfo(url: string): Promise<any> {
     try {
-      const data = await this.extractRefacts(url,url)
-      const a = data.reduce((acc,i) => {
+      const data = await this.extractRefacts(url, url);
+
+      const a = data.reduce((acc, i) => {
         if (acc[i?.type]) {
           acc[i?.type] += 1;
           return acc;
         }
         acc[i?.type] = 1;
         return acc;
-      },{})
-      return a
+      }, {});
+      return a;
     } catch (error) {
       console.log(error);
     }
+  }
+
+  async getUser(username: string): Promise<any> {
+    return this.prisma.user.findFirst({ where: { username } });
   }
 }
