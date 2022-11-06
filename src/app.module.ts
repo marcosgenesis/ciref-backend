@@ -5,9 +5,10 @@ import { HttpModule } from "@nestjs/axios";
 import { RepoModule } from './repo/repo.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
+import { WeightsModule } from './weights/weights.module';
 
 @Module({
-  imports: [HttpModule, RepoModule, PrismaModule],
+  imports: [HttpModule, RepoModule, PrismaModule, WeightsModule],
   controllers: [AppController],
   providers: [AppService,PrismaService],
 })

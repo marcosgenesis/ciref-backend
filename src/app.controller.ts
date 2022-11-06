@@ -25,4 +25,23 @@ export class AppController {
   getUserFromUsername(@Param(':username') username: string): Promise<any> {
     return this.appService.getUser(username);
   }
+
+  @Get('refacts/users')
+  getRefactsAndUsers(@Query('repoUrl') repoUrl: string): Promise<any> {
+    return this.appService.getUsersAndRefacts(repoUrl);
+  }
+
+  @Post('duel')
+  getDuelBetweenUsers(@Body() body: any): Promise<any> {
+    return this.appService.getDuelBetweenUsers(
+      body.repoUrl,
+      body.user1,
+      body.user2,
+    );
+  }
+
+  @Get('refactPoints')
+  getRefactsPointsByType(@Query('repoUrl') repoUrl: string): Promise<any> {
+    return this.appService.getRefactPointsByType(repoUrl);
+  }
 }
