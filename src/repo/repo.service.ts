@@ -13,6 +13,7 @@ export class RepoService {
       data: {
         repoId: repo.repoId.toString(),
         repoUrl: repo.repoUrl,
+        repoName: repo.repoName,
         username: repo.username,
       },
     });
@@ -28,5 +29,13 @@ export class RepoService {
 
   async listFromUser(username: string): Promise<Repo[]> {
     return this.prismaService.repo.findMany({ where: { username } });
+  }
+
+  async listPeopleFromRepo(repoId: string): Promise<any[]> {
+    return this.prismaService.refact.findMany({
+      distinct: ['login'],
+      select: { login: true, avatar: true },
+      where: { repo: { repoId } },
+    });
   }
 }

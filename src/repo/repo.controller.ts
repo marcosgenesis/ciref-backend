@@ -15,4 +15,9 @@ export class RepoController {
   async listRepos(@Param('username') username: string): Promise<any> {
     return await this.repoService.listFromUser(username);
   }
+
+  @Get('/people/:repoId')
+  async listRepoPeople(@Param('repoId') repoId: string): Promise<any> {
+    return await this.repoService.listPeopleFromRepo(repoId);
+  }
 }

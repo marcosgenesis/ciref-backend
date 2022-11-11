@@ -11,6 +11,7 @@ model Repo {
   id       String    @id @default(auto()) @map("_id") @db.ObjectId
   repoId   String
   repoUrl  String
+  repoName String
   active   Boolean   @default(true)
   username String?
   Refact   Refact[]
@@ -76,6 +77,8 @@ model Location {
 model Refact {
   id          String     @id @default(auto()) @map("_id") @db.ObjectId
   uuid_id     String     @unique
+  commit_id   String
+  commit_date DateTime
   type        String
   description String
   login       String

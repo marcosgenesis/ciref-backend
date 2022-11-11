@@ -34,6 +34,10 @@ export class AppService {
       const authors = results.map((i) => ({
         login: i.data.author.login,
         avatar: i.data.author.avatar_url,
+        commit_id: i.data.sha,
+        commit_date: new Date(
+          new Date(i.data.commit.author.date).setHours(0, 0, 0, 0),
+        ),
       }));
 
       const formatted = response.data.map((refact, index) => {
@@ -70,6 +74,8 @@ export class AppService {
                 uuid_id: element.id,
                 type: element.type,
                 description: element.description,
+                commit_id: element.commit_id,
+                commit_date: element.commit_date,
                 login: element.login,
                 avatar: element.avatar,
                 locations: { createMany: { data: element.locations } },
@@ -84,7 +90,11 @@ export class AppService {
     }
   }
 
-  async getRefactsInfo(url: string): Promise<any> {
+  async getRefactsInfo(
+    url: string,
+    initialDate: Date,
+    endDate: Date,
+  ): Promise<any> {
     try {
       const findRepo = await this.prisma.repo.findFirst({
         where: { repoUrl: url },
@@ -94,7 +104,13 @@ export class AppService {
         throw new HttpException('Repo not found', HttpStatus.BAD_REQUEST);
 
       const results = await this.prisma.refact.findMany({
-        where: { repoId: findRepo.id },
+        where: {
+          repoId: findRepo.id,
+          AND: [
+            { commit_date: { gte: initialDate } },
+            { commit_date: { lte: endDate } },
+          ],
+        },
       });
       /**
        * add - 11
@@ -110,11 +126,37 @@ export class AppService {
        * inline - 4
        */
       const a = results.reduce((acc, i) => {
-        if (acc[i?.type]) {
-          acc[i?.type] += 1;
+        const types = [
+          'add',
+          'remove',
+          'move',
+          'rename',
+          'change',
+          'extract',
+          'split',
+          'merge',
+          'replace',
+          'modify',
+          'inline',
+          'others',
+        ];
+        const findType = types.findIndex((e) => {
+          return i?.type
+            .split(' ')
+            .find((a) => a.toLowerCase() === e.toLowerCase());
+        });
+        const typeIndex = findType !== -1 ? findType : types.length - 1;
+
+        if (acc[types[typeIndex]]) {
+          acc[types[typeIndex]]['total'] += 1;
+          acc[types[typeIndex]][i?.type]
+            ? (acc[types[typeIndex]][i?.type] += 1)
+            : (acc[types[typeIndex]][i?.type] = 1);
           return acc;
         }
-        acc[i?.type] = 1;
+        acc[types[typeIndex]] = {};
+        acc[types[typeIndex]]['total'] = 1;
+        acc[types[typeIndex]][i?.type] = 1;
         return acc;
       }, {});
       return a;
@@ -155,11 +197,13 @@ export class AppService {
       });
 
       const a = results.reduce((acc, i) => {
-        const findWeight = Object.entries(findRepo.weights[0]).find((el) => {
-          return i.type.toLocaleLowerCase().includes(el[0]);
-        });
-        const weight = !!findWeight ? findWeight[1] : 1;
-        console.log(weight);
+        let weight = 1;
+        if (findRepo.weights.length) {
+          const findWeight = Object.entries(findRepo.weights[0]).find((el) => {
+            return i.type.toLocaleLowerCase().includes(el[0]);
+          });
+          weight = !!findWeight ? findWeight[1] : 1;
+        }
 
         if (acc[i?.type]) {
           acc[i?.type] += 1 * weight;
@@ -178,39 +222,10 @@ export class AppService {
     return this.prisma.user.findFirst({ where: { username } });
   }
 
-  async getUsersAndRefacts(repoUrl: string): Promise<any> {
-    const findRepo = await this.prisma.repo.findFirst({
-      where: { repoUrl },
-    });
-
-    if (!findRepo)
-      throw new HttpException('Repo not found', HttpStatus.BAD_REQUEST);
-
-    const results = await this.prisma.refact.findMany({
-      select: { login: true, avatar: true, type: true },
-      where: { repoId: findRepo.id },
-    });
-
-    const data = results.reduce((acc, it) => {
-      if (acc[it.login]) {
-        if (acc[it.login].hasOwnProperty(it.type)) {
-          acc[it.login][it.type] += 1;
-          return acc;
-        }
-        acc[it.login][it.type] = 1;
-        return acc;
-      }
-      acc[it.login] = {};
-      acc[it.login][it.type] = 1;
-      return acc;
-    }, {});
-    return data;
-  }
-
-  async getDuelBetweenUsers(
+  async getUsersAndRefacts(
     repoUrl: string,
-    user1: string,
-    user2: string,
+    initialDate: Date,
+    endDate: Date,
   ): Promise<any> {
     const findRepo = await this.prisma.repo.findFirst({
       where: { repoUrl },
@@ -223,7 +238,10 @@ export class AppService {
       select: { login: true, avatar: true, type: true },
       where: {
         repoId: findRepo.id,
-        OR: [{ login: { contains: user1 } }, { login: { contains: user2 } }],
+        AND: [
+          { commit_date: { gte: initialDate } },
+          { commit_date: { lte: endDate } },
+        ],
       },
     });
 
@@ -231,15 +249,187 @@ export class AppService {
       if (acc[it.login]) {
         if (acc[it.login].hasOwnProperty(it.type)) {
           acc[it.login][it.type] += 1;
+          acc[it.login]['total'] += 1;
           return acc;
         }
         acc[it.login][it.type] = 1;
+        acc[it.login]['total'] += 1;
         return acc;
       }
       acc[it.login] = {};
+      acc[it.login]['avatar'] = it.avatar;
+      acc[it.login]['total'] = 1;
       acc[it.login][it.type] = 1;
       return acc;
     }, {});
-    return data;
+
+    const formattedData = Object.entries(data).map((i: any) => {
+      const total = i[1].total;
+      const avatar = i[1].avatar;
+      delete i[1].total;
+      delete i[1].avatar;
+      return {
+        user: { login: i[0], avatar },
+        total,
+        refacts: i[1],
+      };
+    });
+
+    return formattedData.sort((a, b) => b.total - a.total);
+  }
+
+  async getDuelBetweenUsers(
+    repoUrl: string,
+    user1: string,
+    user2: string,
+    initialDate: Date,
+    endDate: Date,
+  ): Promise<any> {
+    const findRepo = await this.prisma.repo.findFirst({
+      where: { repoUrl },
+    });
+
+    if (!findRepo)
+      throw new HttpException('Repo not found', HttpStatus.BAD_REQUEST);
+
+    const results = await this.prisma.refact.findMany({
+      select: { login: true, avatar: true, type: true },
+      where: {
+        repoId: findRepo.id,
+        AND: [
+          { commit_date: { gte: initialDate } },
+          { commit_date: { lte: endDate } },
+        ],
+        OR: [{ login: { contains: user1 } }, { login: { contains: user2 } }],
+      },
+    });
+    const usersRefacts = results.reduce((acc, item) => {
+      if (acc[item.login]) {
+        acc[item.login].push(item);
+        return acc;
+      }
+      acc[item.login] = [];
+      return acc;
+    }, {});
+
+    const a = Object.entries(usersRefacts).map((userRefacts: any) => {
+      const refacts = userRefacts[1].reduce((acc, i) => {
+        const types = [
+          'add',
+          'remove',
+          'move',
+          'rename',
+          'change',
+          'extract',
+          'split',
+          'merge',
+          'replace',
+          'modify',
+          'inline',
+          'others',
+        ];
+        const findType = types.findIndex((e) => {
+          return i?.type
+            .split(' ')
+            .find((a) => a.toLowerCase() === e.toLowerCase());
+        });
+        const typeIndex = findType !== -1 ? findType : types.length - 1;
+
+        if (acc[types[typeIndex]]) {
+          acc[types[typeIndex]]['total'] += 1;
+          acc[types[typeIndex]][i?.type]
+            ? (acc[types[typeIndex]][i?.type] += 1)
+            : (acc[types[typeIndex]][i?.type] = 1);
+          return acc;
+        }
+        acc[types[typeIndex]] = {};
+        acc[types[typeIndex]]['total'] = 1;
+        acc[types[typeIndex]][i?.type] = 1;
+        return acc;
+      }, {});
+      return {
+        user: userRefacts[0],
+        refacts,
+      };
+    });
+    return a;
+  }
+
+  async getRefactByTime(
+    repoId: string,
+    initialDate: Date,
+    endDate: Date,
+  ): Promise<any> {
+    return await this.prisma.refact.groupBy({
+      by: ['repoId', 'commit_date'],
+      _count: { _all: true, id: true },
+      orderBy: { commit_date: 'asc' },
+      where: {
+        AND: [
+          { repo: { repoId } },
+          { commit_date: { gte: initialDate } },
+          { commit_date: { lte: endDate } },
+        ],
+      },
+    });
+  }
+
+  async getPathsMoreRefactored(
+    repoId: string,
+    initialDate: Date,
+    endDate: Date,
+  ): Promise<any> {
+    const response = await this.prisma.refact.findMany({
+      select: {
+        login: true,
+        type: true,
+        description: true,
+        locations: { where: { side: 'left' } },
+      },
+      where: {
+        AND: [
+          { commit_date: { gte: initialDate } },
+          { commit_date: { lte: endDate } },
+          { repo: { repoId } },
+        ],
+      },
+    });
+
+    const formattedWithTypes = response.reduce((acc, item) => {
+      const a = item.locations.reduce((acc2, item2) => {
+        if (acc2[item2.filePath]) {
+          acc2[item2.filePath].total += 1;
+          return acc2;
+        }
+        acc2[item2.filePath] = { total: 1 };
+        return acc2;
+      }, {});
+
+      acc.push({
+        type: item.type,
+        path: [Object.keys(a)[0]],
+        total: Object.values<any>(a)[0].total,
+      });
+      return acc;
+    }, []);
+
+    const formatted = formattedWithTypes.reduce((acc, item) => {
+      if (acc[item.path]) {
+        if (acc[item.path][item.type]) {
+          acc[item.path].total += 1;
+          acc[item.path][item.type] += 1;
+          return acc;
+        }
+        acc[item.path].total += 1;
+        acc[item.path][item.type] = 1;
+        return acc;
+      }
+      acc[item.path] = {};
+      acc[item.path].total = 1;
+      acc[item.path][item.type] = 1;
+      return acc;
+    }, {});
+
+    return formatted;
   }
 }

@@ -17,8 +17,12 @@ export class AppController {
   }
 
   @Get('info')
-  getRefactsInfo(@Query('url') url: string): Promise<any> {
-    return this.appService.getRefactsInfo(url);
+  getRefactsInfo(
+    @Query('url') url: string,
+    @Query('startDate') startDate: Date,
+    @Query('endDate') endDate: Date,
+  ): Promise<any> {
+    return this.appService.getRefactsInfo(url, startDate, endDate);
   }
 
   @Get('user/:username')
@@ -27,21 +31,53 @@ export class AppController {
   }
 
   @Get('refacts/users')
-  getRefactsAndUsers(@Query('repoUrl') repoUrl: string): Promise<any> {
-    return this.appService.getUsersAndRefacts(repoUrl);
+  getRefactsAndUsers(
+    @Query('repoUrl') repoUrl: string,
+    @Query('startDate') startDate: Date,
+    @Query('endDate') endDate: Date,
+  ): Promise<any> {
+    return this.appService.getUsersAndRefacts(repoUrl, startDate, endDate);
   }
 
   @Post('duel')
-  getDuelBetweenUsers(@Body() body: any): Promise<any> {
+  getDuelBetweenUsers(
+    @Body() body: any,
+    @Query('startDate') startDate: Date,
+    @Query('endDate') endDate: Date,
+  ): Promise<any> {
     return this.appService.getDuelBetweenUsers(
       body.repoUrl,
       body.user1,
       body.user2,
+      startDate,
+      endDate,
     );
   }
 
   @Get('refactPoints')
   getRefactsPointsByType(@Query('repoUrl') repoUrl: string): Promise<any> {
     return this.appService.getRefactPointsByType(repoUrl);
+  }
+
+  @Get('refacts/time')
+  getRefactsBasedOnTime(
+    @Query('repoId') repoId: string,
+    @Query('startDate') startDate: Date,
+    @Query('endDate') endDate: Date,
+  ): Promise<any> {
+    return this.appService.getRefactByTime(
+      repoId,
+      startDate ?? undefined,
+      endDate ?? undefined,
+    );
+  }
+
+  @Get('refacts/paths')
+  getPathsMoreRefactored(
+    @Query('repoId') repoId: string,
+    @Query('startDate') startDate: Date,
+    @Query('endDate') endDate: Date,
+  ): Promise<any> {
+    return this.appService.getPathsMoreRefactored(repoId, startDate, endDate);
   }
 }
