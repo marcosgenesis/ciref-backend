@@ -8,12 +8,14 @@ generator client {
 }
 
 model Repo {
-  id       String   @id @default(auto()) @map("_id") @db.ObjectId
+  id       String    @id @default(auto()) @map("_id") @db.ObjectId
   repoId   String
   repoUrl  String
-  active   Boolean  @default(true)
+  repoName String
+  active   Boolean   @default(true)
   username String?
   Refact   Refact[]
+  weights  Weights[]
 }
 
 model Account {
@@ -64,12 +66,42 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+model Location {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  filePath String
+  side     String
+  refactId String
+  refact   Refact @relation(fields: [refactId], references: [uuid_id])
+}
+
 model Refact {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  uuid_id     String     @unique
+  commit_id   String
+  commit_date DateTime
   type        String
   description String
-  filePath    String
-  createdAt   DateTime @default(now())
-  repo        Repo     @relation(fields: [repoId], references: [id])
-  repoId      String   @db.ObjectId
+  login       String
+  avatar      String
+  createdAt   DateTime   @default(now())
+  repo        Repo       @relation(fields: [repoId], references: [id])
+  repoId      String     @db.ObjectId
+  locations   Location[]
+}
+
+model Weights {
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  add     Int    @default(1)
+  remove  Int    @default(1)
+  move    Int    @default(1)
+  rename  Int    @default(1)
+  change  Int    @default(1)
+  extract Int    @default(1)
+  split   Int    @default(1)
+  merge   Int    @default(1)
+  replace Int    @default(1)
+  modify  Int    @default(1)
+  inline  Int    @default(1)
+  Repo    Repo   @relation(fields: [repoId], references: [id])
+  repoId  String @unique @db.ObjectId
 }
