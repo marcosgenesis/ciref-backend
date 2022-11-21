@@ -5,7 +5,7 @@ import { PrismaService } from './prisma/prisma.service';
 @Injectable()
 export class AppService {
   constructor(private api: HttpService, private prisma: PrismaService) {}
-  async extractRefacts(name: string, url: string): Promise<any> {
+  async extractRefacts(username: string, url: string): Promise<any> {
     try {
       const findRepo = await this.prisma.repo.findFirst({
         where: { repoUrl: url },
@@ -15,14 +15,14 @@ export class AppService {
         throw new HttpException('Repo not found', HttpStatus.BAD_REQUEST);
 
       const response = await this.api.axiosRef.post(
-        'http://172.28.224.1:8080/refact/all',
-        { name, url, branch: 'master' },
+        'http://172.29.240.1:8080/refact/all',
+        { name: findRepo.repoName, url, branch: 'master' },
       );
 
       const results = await Promise.all(
         response.data.map((item) =>
           this.api.axiosRef.get(
-            `https://api.github.com/repos/marcosgenesis/${name}/commits/${item.commitId}`,
+            `https://api.github.com/repos/${username}/${findRepo.repoName}/commits/${item.commitId}`,
             {
               headers: {
                 Authorization: `Bearer ${process.env.API_GITHUB_AUTH}`,
@@ -31,6 +31,8 @@ export class AppService {
           ),
         ),
       );
+      // console.log(results);
+
       const authors = results.map((i) => ({
         login: i.data.author.login,
         avatar: i.data.author.avatar_url,
@@ -102,7 +104,6 @@ export class AppService {
 
       if (!findRepo)
         throw new HttpException('Repo not found', HttpStatus.BAD_REQUEST);
-
       const results = await this.prisma.refact.findMany({
         where: {
           repoId: findRepo.id,
@@ -189,8 +190,6 @@ export class AppService {
 
       if (!findRepo)
         throw new HttpException('Repo not found', HttpStatus.BAD_REQUEST);
-
-      console.log(findRepo);
 
       const results = await this.prisma.refact.findMany({
         where: { repoId: findRepo.id },
@@ -375,7 +374,7 @@ export class AppService {
   }
 
   async getPathsMoreRefactored(
-    repoId: string,
+    repoUrl: string,
     initialDate: Date,
     endDate: Date,
   ): Promise<any> {
@@ -390,10 +389,41 @@ export class AppService {
         AND: [
           { commit_date: { gte: initialDate } },
           { commit_date: { lte: endDate } },
-          { repo: { repoId } },
+          { repo: { repoUrl } },
         ],
       },
     });
+    // const groupBy = (arr, keys) => {
+    //   return arr.reduce((storage, item) => {
+    //     const objKey = keys.map((key) => `${item[key]}`).join(':'); //should be some unique delimiter that wont appear in your keys
+    //     if (storage[objKey]) {
+    //       storage[objKey]['refacts'].push(item);
+    //       storage[objKey].total += 1;
+    //     } else {
+    //       storage[objKey] = {};
+    //       storage[objKey]['refacts'] = [item];
+    //       storage[objKey].total = 1;
+    //     }
+    //     return storage;
+    //   }, {});
+    // };
+
+    // const response = await this.prisma.refact.findMany({
+    //   select: {
+    //     commit_date: true,
+
+    //     locations: { select: { filePath: true }, where: { side: 'left' } },
+    //   },
+    //   orderBy: { commit_date: 'asc' },
+    //   where: {
+    //     AND: [
+    //       { repo: { repoUrl } },
+    //       { commit_date: { gte: initialDate } },
+    //       { commit_date: { lte: endDate } },
+    //     ],
+    //   },
+    // });
+    // const formatted = groupBy(response, ['commit_date']);
 
     const formattedWithTypes = response.reduce((acc, item) => {
       const a = item.locations.reduce((acc2, item2) => {
@@ -414,22 +444,128 @@ export class AppService {
     }, []);
 
     const formatted = formattedWithTypes.reduce((acc, item) => {
+      const types = [
+        'add',
+        'remove',
+        'move',
+        'rename',
+        'change',
+        'extract',
+        'split',
+        'merge',
+        'replace',
+        'modify',
+        'inline',
+        'others',
+      ];
+      const findType = types.findIndex((e) => {
+        return item?.type
+          .split(' ')
+          .find((a) => a.toLowerCase() === e.toLowerCase());
+      });
+      const typeIndex = findType !== -1 ? findType : types.length - 1;
+
       if (acc[item.path]) {
-        if (acc[item.path][item.type]) {
+        if (acc[item.path][types[typeIndex]]) {
           acc[item.path].total += 1;
-          acc[item.path][item.type] += 1;
+          acc[item.path][types[typeIndex]] += 1;
           return acc;
         }
         acc[item.path].total += 1;
-        acc[item.path][item.type] = 1;
+        acc[item.path][types[typeIndex]] = 1;
         return acc;
       }
       acc[item.path] = {};
       acc[item.path].total = 1;
-      acc[item.path][item.type] = 1;
+      acc[item.path][types[typeIndex]] = 1;
       return acc;
     }, {});
 
     return formatted;
+  }
+  /**
+   *
+   * @param repoId
+   * @param initialDate
+   * @param endDate
+   */
+  async getRefactsByPointsPerUsers(
+    repoUrl: string,
+    initialDate: Date,
+    endDate: Date,
+  ): Promise<any> {
+    const findRepo = await this.prisma.repo.findFirst({
+      where: { repoUrl: repoUrl },
+      include: {
+        weights: {
+          select: {
+            add: true,
+            remove: true,
+            move: true,
+            rename: true,
+            change: true,
+            extract: true,
+            split: true,
+            merge: true,
+            replace: true,
+            modify: true,
+            inline: true,
+          },
+        },
+      },
+    });
+
+    if (!findRepo)
+      throw new HttpException('Repo not found', HttpStatus.BAD_REQUEST);
+
+    const results = await this.prisma.refact.findMany({
+      where: {
+        AND: [
+          { commit_date: { gte: initialDate } },
+          { commit_date: { lte: endDate } },
+          { repoId: findRepo.id },
+        ],
+      },
+    });
+    const data = results.reduce((acc, it) => {
+      let weight = 1;
+
+      if (findRepo.weights.length) {
+        const findWeight = Object.entries(findRepo.weights[0]).find((el) => {
+          return it.type.toLocaleLowerCase().includes(el[0]);
+        });
+        weight = !!findWeight ? findWeight[1] : 1;
+      }
+
+      if (acc[it.login]) {
+        if (acc[it.login].hasOwnProperty(it.type)) {
+          acc[it.login][it.type] += 1 * weight;
+          acc[it.login]['total'] += 1 * weight;
+          return acc;
+        }
+        acc[it.login][it.type] = 1 * weight;
+        acc[it.login]['total'] += 1 * weight;
+        return acc;
+      }
+      acc[it.login] = {};
+      acc[it.login]['avatar'] = it.avatar;
+      acc[it.login]['total'] = 1 * weight;
+      acc[it.login][it.type] = 1 * weight;
+      return acc;
+    }, {});
+
+    const formattedData = Object.entries(data).map((i: any) => {
+      const total = i[1].total;
+      const avatar = i[1].avatar;
+      delete i[1].total;
+      delete i[1].avatar;
+      return {
+        user: { login: i[0], avatar },
+        total,
+        refacts: i[1],
+      };
+    });
+
+    return formattedData.sort((a, b) => b.total - a.total);
   }
 }

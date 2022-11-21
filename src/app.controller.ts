@@ -7,7 +7,7 @@ export class AppController {
 
   @Post('refact')
   extractRefacts(@Body() body): Promise<any> {
-    return this.appService.extractRefacts(body.name, body.url);
+    return this.appService.extractRefacts(body.username, body.url);
   }
 
   @Post('payload')
@@ -74,10 +74,23 @@ export class AppController {
 
   @Get('refacts/paths')
   getPathsMoreRefactored(
-    @Query('repoId') repoId: string,
+    @Query('repoUrl') repoUrl: string,
     @Query('startDate') startDate: Date,
     @Query('endDate') endDate: Date,
   ): Promise<any> {
-    return this.appService.getPathsMoreRefactored(repoId, startDate, endDate);
+    return this.appService.getPathsMoreRefactored(repoUrl, startDate, endDate);
+  }
+
+  @Get('refacts/points/users')
+  getRefactsByPointsPerUsers(
+    @Query('repoUrl') repoUrl: string,
+    @Query('startDate') startDate: Date,
+    @Query('endDate') endDate: Date,
+  ): Promise<any> {
+    return this.appService.getRefactsByPointsPerUsers(
+      repoUrl,
+      startDate,
+      endDate,
+    );
   }
 }
