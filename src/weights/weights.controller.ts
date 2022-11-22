@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { WeightsService } from './weights.service';
 
 @Controller('weights')
@@ -11,7 +11,7 @@ export class WeightsController {
   }
 
   @Get()
-  getWeights(@Body() body): Promise<any> {
-    return this.weightsService.getWeights(body.repoUrl);
+  getWeights(@Query('repoUrl') repoUrl): Promise<any> {
+    return this.weightsService.getWeights(repoUrl);
   }
 }

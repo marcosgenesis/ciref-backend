@@ -15,7 +15,7 @@ export class AppService {
         throw new HttpException('Repo not found', HttpStatus.BAD_REQUEST);
 
       const response = await this.api.axiosRef.post(
-        'http://172.29.240.1:8080/refact/all',
+        `${process.env.RM_API}/refact/all`,
         { name: findRepo.repoName, url, branch: 'master' },
       );
 
